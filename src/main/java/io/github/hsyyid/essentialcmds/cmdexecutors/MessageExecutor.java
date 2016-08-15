@@ -74,8 +74,8 @@ public class MessageExecutor extends AsyncCommandExecutorBase
 				return;
 			}
 
-			src.sendMessage(Text.of(TextColors.GOLD, "[", TextColors.RED, player.getName(), TextColors.GOLD, " > ", TextColors.RED, recipient.getName(), TextColors.GOLD, "]: ", TextColors.GRAY, message));
-			recipient.sendMessage(Text.of(TextColors.GOLD, "[", TextColors.RED, player.getName(), TextColors.GOLD, " > ", TextColors.RED, recipient.getName(), TextColors.GOLD, "]: ", TextColors.GRAY, message));
+			src.sendMessage(Text.of(TextColors.GOLD, "[", TextColors.LIGHT_PURPLE, player.getName(), TextColors.GOLD, " > ", TextColors.RED, recipient.getName(), TextColors.GOLD, "]: ", TextColors.GREEN, message));
+			recipient.sendMessage(Text.of(TextColors.GOLD, "[", TextColors.LIGHT_PURPLE, player.getName(), TextColors.GOLD, " > ", TextColors.RED, recipient.getName(), TextColors.GOLD, "]: ", TextColors.GREEN, message));
 
 			Message messageToRemove = null;
 
