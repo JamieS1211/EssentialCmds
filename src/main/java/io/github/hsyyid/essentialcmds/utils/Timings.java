@@ -24,27 +24,69 @@
  */
 package io.github.hsyyid.essentialcmds.utils;
 
-import io.github.hsyyid.essentialcmds.PluginInfo;
+import co.aikar.timings.Timing;
+import io.github.hsyyid.essentialcmds.EssentialCmds;
 
-import org.spongepowered.api.Sponge;
-import org.spongepowered.api.text.Text;
-import org.spongepowered.api.text.serializer.TextSerializers;
-
-public class EssLogger
+public class Timings
 {
-	public static Text toText(String str)
+	private final EssentialCmds plugin;
+	private final Timing firstJoin, safeLogin, mail, saveInventory, loginMessage, afk, teleportPlayer, teleportCooldown;
+
+	public Timings(EssentialCmds plugin)
 	{
-		return TextSerializers.FORMATTING_CODE.deserialize(str);
+		this.plugin = plugin;
+		this.firstJoin = timing("firstJoin");
+		this.safeLogin = timing("safeLogin");
+		this.mail = timing("getMail");
+		this.saveInventory = timing("saveInventory");
+		this.loginMessage = timing("loginMessage");
+		this.teleportPlayer = timing("teleportPlayer");
+		this.teleportCooldown = timing("teleportCooldown");
+		this.afk = timing("afk");
 	}
 
-	public void info(String string)
+	private Timing timing(String key)
 	{
-		Sponge.getServer().getConsole().sendMessage(toText("[" + PluginInfo.NAME + "]: " + string));
+		return co.aikar.timings.Timings.of(this.plugin, key);
 	}
 
-	public void error(String string)
+	public Timing firstJoin()
 	{
-		Sponge.getServer().getConsole().sendMessage(toText("[" + PluginInfo.NAME + "]: &c" + string));
+		return firstJoin;
 	}
 
+	public Timing safeLogin()
+	{
+		return safeLogin;
+	}
+
+	public Timing getMail()
+	{
+		return mail;
+	}
+
+	public Timing saveInventory()
+	{
+		return saveInventory;
+	}
+
+	public Timing loginMessage()
+	{
+		return loginMessage;
+	}
+
+	public Timing afk()
+	{
+		return afk;
+	}
+
+	public Timing teleportPlayer()
+	{
+		return teleportPlayer;
+	}
+
+	public Timing teleportCooldown()
+	{
+		return teleportCooldown;
+	}
 }

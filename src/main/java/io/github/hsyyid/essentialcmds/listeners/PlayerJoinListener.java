@@ -24,11 +24,12 @@
  */
 package io.github.hsyyid.essentialcmds.listeners;
 
-import io.github.hsyyid.essentialcmds.EssentialCmds;
-import io.github.hsyyid.essentialcmds.utils.Mail;
-import io.github.hsyyid.essentialcmds.utils.Utils;
-import org.spongepowered.api.Sponge;
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+
 import org.spongepowered.api.block.BlockTypes;
+import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.entity.Transform;
 import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.Listener;
@@ -36,18 +37,11 @@ import org.spongepowered.api.event.network.ClientConnectionEvent;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.channel.MessageChannel;
 import org.spongepowered.api.text.format.TextColors;
-import org.spongepowered.api.world.Location;
-import org.spongepowered.api.world.TeleportHelper;
 import org.spongepowered.api.world.World;
 
-import java.text.SimpleDateFormat;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.TimeZone;
-import java.util.stream.Collectors;
+import io.github.hsyyid.essentialcmds.EssentialCmds;
+import io.github.hsyyid.essentialcmds.utils.Mail;
+import io.github.hsyyid.essentialcmds.utils.Utils;
 
 public class PlayerJoinListener
 {
@@ -56,25 +50,13 @@ public class PlayerJoinListener
 	{
 		Player player = event.getTargetEntity();
 
-		if (this.compareInstants(player.getJoinData().firstPlayed().get(), player.getJoinData().lastPlayed().get()))
+		try
 		{
-			Transform<World> spawn = Utils.getFirstSpawn();
+			EssentialCmds.timings.firstJoin().startTimingIfSync();
 
-			if (spawn != null)
+			if (this.compareInstants(player.getJoinData().firstPlayed().get(), player.getJoinData().lastPlayed().get()))
 			{
-				if (!Objects.equals(player.getWorld().getUniqueId(), spawn.getExtent().getUniqueId()))
-				{
-					player.transferToWorld(spawn.getExtent().getUniqueId(), spawn.getPosition());
-					player.setTransform(spawn);
-				}
-				else
-				{
-					player.setTransform(spawn);
-				}
-			}
-			else
-			{
-				spawn = Utils.getSpawn();
+				Transform<World> spawn = Utils.getFirstSpawn();
 
 				if (spawn != null)
 				{
@@ -88,59 +70,120 @@ public class PlayerJoinListener
 						player.setTransform(spawn);
 					}
 				}
-			}
+				else
+				{
+					spawn = Utils.getSpawn();
 
-			Text firstJoinMsg = Utils.getFirstJoinMsg(player.getName());
-			MessageChannel.TO_ALL.send(firstJoinMsg);
+					if (spawn != null)
+					{
+						if (!Objects.equals(player.getWorld().getUniqueId(), spawn.getExtent().getUniqueId()))
+						{
+							player.transferToWorld(spawn.getExtent().getUniqueId(), spawn.getPosition());
+							player.setTransform(spawn);
+						}
+						else
+						{
+							player.setTransform(spawn);
+						}
+					}
+				}
+
+				Text firstJoinMsg = Utils.getFirstJoinMsg(player.getName());
+				MessageChannel.TO_ALL.send(firstJoinMsg);
+			}
+		}
+		finally
+		{
+			EssentialCmds.timings.firstJoin().stopTimingIfSync();
 		}
 
-		if (Utils.isSafeLoginEnabled())
+		try
 		{
-			if (player.getLocation().add(0, -1, 0).getBlockType() == BlockTypes.AIR)
+			EssentialCmds.timings.safeLogin().startTimingIfSync();
+
+			if (EssentialCmds.flyingPlayers.contains(player.getUniqueId()))
 			{
-				Optional<Location<World>> safeLocation = Sponge.getGame().getTeleportHelper().getSafeLocation(player.getLocation(), 256, TeleportHelper.DEFAULT_WIDTH);
+				player.offer(Keys.CAN_FLY, true);
 
-				if (safeLocation.isPresent())
-					player.setLocationSafely(safeLocation.get());
+				if (player.getLocation().sub(0, 1, 0).getBlockType() == BlockTypes.AIR)
+				{
+					player.offer(Keys.IS_FLYING, true);
+				}
 			}
 		}
-
-		Calendar cal = Calendar.getInstance();
-		SimpleDateFormat format = new SimpleDateFormat("dd MMM yyyy HH:mm:ss");
-		format.setTimeZone(TimeZone.getTimeZone("GMT"));
-		Utils.setLastTimePlayerJoined(player.getUniqueId(), format.format(cal.getTime()));
-		player.sendMessage(Utils.getJoinMsg());
-
-		ArrayList<Mail> newMail = (ArrayList<Mail>) Utils.getMail().stream().filter(mail -> mail.getRecipientName().equals(player.getName())).collect(Collectors.toList());
-
-		if (newMail.size() > 0)
+		finally
 		{
-			player.sendMessage(Text.of(TextColors.GOLD, "[Mail]: ", TextColors.GRAY, "While you were away, you received new mail to view it do ", TextColors.RED, "/listmail"));
+			EssentialCmds.timings.safeLogin().stopTimingIfSync();
 		}
 
-		EssentialCmds.recentlyJoined.add(event.getTargetEntity());
+		player.sendMessage(Utils.getJoinMsg(player.getName()));
 
-		// Remove previous AFK, so player does not join as AFK.
-		if (EssentialCmds.afkList.containsKey(player.getUniqueId()))
+		try
 		{
-			EssentialCmds.afkList.remove(player.getUniqueId());
-		}
+			EssentialCmds.timings.getMail().startTimingIfSync();
 
-		Text loginMessage = Utils.getLoginMessage(player.getName());
+			List<Mail> mail = Utils.getMail(player);
 
-		if (loginMessage != null && !loginMessage.equals(""))
-		{
-			if (loginMessage.isEmpty())
+			if (mail.size() > 0)
 			{
-				event.setMessageCancelled(true);
-			}
-			else
-			{
-				event.setMessage(loginMessage);
+				player.sendMessage(Text.of(TextColors.GOLD, "[Mail]: ", TextColors.GRAY, "While you were away, you received new mail to view it do ", TextColors.RED, "/listmail"));
 			}
 		}
+		finally
+		{
+			EssentialCmds.timings.getMail().stopTimingIfSync();
+		}
 
-		Utils.savePlayerInventory(player, player.getWorld().getUniqueId());
+		try
+		{
+			EssentialCmds.timings.afk().startTimingIfSync();
+
+			EssentialCmds.recentlyJoined.add(event.getTargetEntity());
+
+			// Remove previous AFK, so player does not join as AFK.
+			if (EssentialCmds.afkList.containsKey(player.getUniqueId()))
+			{
+				EssentialCmds.afkList.remove(player.getUniqueId());
+			}
+		}
+		finally
+		{
+			EssentialCmds.timings.afk().stopTimingIfSync();
+		}
+
+		try
+		{
+			EssentialCmds.timings.loginMessage().startTimingIfSync();
+
+			Text loginMessage = Utils.getLoginMessage(player.getName());
+
+			if (loginMessage != null && !loginMessage.equals(""))
+			{
+				if (loginMessage.isEmpty())
+				{
+					event.setMessageCancelled(true);
+				}
+				else
+				{
+					event.setMessage(loginMessage);
+				}
+			}
+		}
+		finally
+		{
+			EssentialCmds.timings.loginMessage().stopTimingIfSync();
+		}
+
+		try
+		{
+			EssentialCmds.timings.saveInventory().startTimingIfSync();
+
+			Utils.savePlayerInventory(player, player.getWorld().getUniqueId());
+		}
+		finally
+		{
+			EssentialCmds.timings.saveInventory().stopTimingIfSync();
+		}
 	}
 
 	public boolean compareInstants(Instant o1, Instant o2)

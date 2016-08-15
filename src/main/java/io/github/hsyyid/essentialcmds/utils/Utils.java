@@ -38,7 +38,6 @@ import io.github.hsyyid.essentialcmds.managers.config.Config;
 import io.github.hsyyid.essentialcmds.managers.config.HomeConfig;
 import io.github.hsyyid.essentialcmds.managers.config.InventoryConfig;
 import io.github.hsyyid.essentialcmds.managers.config.JailConfig;
-import io.github.hsyyid.essentialcmds.managers.config.PlayerDataConfig;
 import io.github.hsyyid.essentialcmds.managers.config.RulesConfig;
 import io.github.hsyyid.essentialcmds.managers.config.SpawnConfig;
 import io.github.hsyyid.essentialcmds.managers.config.WarpConfig;
@@ -66,6 +65,7 @@ import org.spongepowered.api.world.Location;
 import org.spongepowered.api.world.World;
 
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -90,6 +90,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
@@ -104,10 +105,11 @@ public class Utils
 	private static Configurable rulesConfig = RulesConfig.getConfig();
 	private static Configurable jailsConfig = JailConfig.getConfig();
 	private static Configurable spawnConfig = SpawnConfig.getConfig();
-	private static Configurable playerDataConfig = PlayerDataConfig.getConfig();
 	private static Configurable inventoryConfig = InventoryConfig.getConfig();
 	private static Configurable worldConfig = WorldConfig.getConfig();
 	private static ConfigManager configManager = new ConfigManager();
+
+	private static List<Mail> mail = Lists.newArrayList();
 
 	public static void setSQLPort(String value)
 	{
@@ -186,7 +188,7 @@ public class Utils
 
 				DataSource datasource = sql.getDataSource("jdbc:mysql://" + host + ":" + port + "/" + database + "?user=" + username + "&password=" + password);
 
-				String executeString = "CREATE TABLE IF NOT EXISTS MUTES " + "(UUID VARCHAR(256) PRIMARY KEY NOT NULL)";
+				String executeString = "CREATE TABLE IF NOT EXISTS MUTES " + "(UUID CHAR(36) PRIMARY KEY NOT NULL)";
 				execute(executeString, datasource);
 
 				executeString = "DELETE FROM MUTES WHERE UUID='" + playerUUID.toString() + "';";
@@ -294,18 +296,6 @@ public class Utils
 		return "Mutes";
 	}
 
-	public static boolean isSafeLoginEnabled()
-	{
-		CommentedConfigurationNode node = Configs.getConfig(mainConfig).getNode("login", "safe");
-
-		if (node.getValue() != null)
-			return node.getBoolean();
-		else
-			Configs.setValue(mainConfig, node.getPath(), true);
-
-		return true;
-	}
-
 	public static boolean areBlacklistMsgsEnabled()
 	{
 		CommentedConfigurationNode node = Configs.getConfig(mainConfig).getNode("blacklist", "messages");
@@ -388,19 +378,6 @@ public class Utils
 	public static void setUseMySQL(boolean value)
 	{
 		Configs.setValue(mainConfig, new Object[] { "mysql", "use" }, value);
-	}
-
-	public static String getLastTimePlayerJoined(UUID uuid)
-	{
-		CommentedConfigurationNode node = Configs.getConfig(playerDataConfig).getNode("player", uuid.toString(), "time");
-		if (configManager.getString(node).isPresent())
-			return node.getString();
-		return "";
-	}
-
-	public static void setLastTimePlayerJoined(UUID uuid, String time)
-	{
-		Configs.setValue(playerDataConfig, new Object[] { "player", uuid.toString(), "time" }, time);
 	}
 
 	public static Text getLoginMessage(String playerName)
@@ -808,26 +785,26 @@ public class Utils
 		Configs.setValue(mainConfig, blacklistNode.getPath(), newValue);
 	}
 
-	public static ArrayList<Mail> getMail()
+	public static void readMail()
 	{
-		String json;
+		String json = null;
 
-		try
+		if (new File("Mail.json").exists())
 		{
-			json = readFile("Mail.json", StandardCharsets.UTF_8);
-		}
-		catch (Exception e)
-		{
-			return new ArrayList<>();
-		}
+			try
+			{
+				json = readFile("Mail.json", StandardCharsets.UTF_8);
+			}
+			catch (Exception e)
+			{
+				EssentialCmds.getEssentialCmds().getLogger().error("Error while reading Mail:");
+				e.printStackTrace();
+			}
 
-		if (json != null && json.length() > 0)
-		{
-			return new ArrayList<>(Arrays.asList(gson.fromJson(json, Mail[].class)));
-		}
-		else
-		{
-			return new ArrayList<>();
+			if (json != null && json.length() > 0)
+			{
+				Utils.mail = new ArrayList<>(Arrays.asList(gson.fromJson(json, Mail[].class)));
+			}
 		}
 	}
 
@@ -839,81 +816,19 @@ public class Utils
 
 	public static void addMail(String senderName, String recipientName, String message)
 	{
-		if (Utils.getMail() != null)
-		{
-			ArrayList<Mail> currentMail = Utils.getMail();
-
-			currentMail.add(new Mail(recipientName, senderName, message));
-			String json;
-
-			try
-			{
-				json = gson.toJson(currentMail);
-
-				// Assume default encoding.
-				FileWriter fileWriter = new FileWriter("Mail.json");
-
-				// Always wrap FileWriter in BufferedWriter.
-				BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
-
-				bufferedWriter.write(json);
-				bufferedWriter.flush();
-
-				// Always close files.
-				bufferedWriter.close();
-			}
-			catch (Exception ex)
-			{
-				EssentialCmds.getEssentialCmds().getLogger().error("Could not save JSON file!");
-			}
-		}
+		Utils.mail.add(new Mail(recipientName, senderName, message));
 	}
 
 	public static void removeMail(Mail mail)
 	{
-		if (Utils.getMail() != null)
-		{
-			ArrayList<Mail> currentMail = Utils.getMail();
-
-			Mail mailToRemove = null;
-
-			for (Mail m : currentMail)
+		Utils.mail.removeIf(m -> {
+			if (m.getRecipientName().equals(mail.getRecipientName()) && m.getSenderName().equals(mail.getSenderName()) && m.getMessage().equals(mail.getMessage()))
 			{
-				if (m.getRecipientName().equals(mail.getRecipientName()) && m.getSenderName().equals(mail.getSenderName()) && m.getMessage().equals(mail.getMessage()))
-				{
-					mailToRemove = m;
-					break;
-				}
+				return true;
 			}
 
-			if (mailToRemove != null)
-			{
-				currentMail.remove(mailToRemove);
-			}
-
-			String json;
-
-			try
-			{
-				json = gson.toJson(currentMail);
-
-				// Assume default encoding.
-				FileWriter fileWriter = new FileWriter("Mail.json");
-
-				// Always wrap FileWriter in BufferedWriter.
-				BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
-
-				bufferedWriter.write(json);
-				bufferedWriter.flush();
-
-				// Always close files.
-				bufferedWriter.close();
-			}
-			catch (Exception ex)
-			{
-				EssentialCmds.getEssentialCmds().getLogger().error("Could not save JSON file!");
-			}
-		}
+			return false;
+		});
 	}
 
 	public static void setWarp(Transform<World> transform, String warpName)
@@ -929,7 +844,7 @@ public class Utils
 		Configs.saveConfig(warpsConfig);
 	}
 
-	public static Text getJoinMsg()
+	public static Text getJoinMsg(String name)
 	{
 		ConfigurationNode valueNode = Configs.getConfig(mainConfig).getNode((Object[]) ("message.join").split("\\."));
 		String message;
@@ -949,7 +864,7 @@ public class Utils
 			return Utils.getURL(message);
 		}
 
-		return TextSerializers.FORMATTING_CODE.deserialize(message);
+		return TextSerializers.FORMATTING_CODE.deserialize(message.replaceAll("@p", name));
 	}
 
 	public static String getFirstChatCharReplacement()
@@ -1103,42 +1018,24 @@ public class Utils
 		Configs.saveConfig(mainConfig);
 	}
 
-	public static void setLastTeleportOrDeathLocation(UUID userName, Location<World> playerLocation)
+	public static void setLastTeleportOrDeathLocation(UUID uuid, Location<World> playerLocation)
 	{
-		String playerName = userName.toString();
+		if (EssentialCmds.backLocations.containsKey(uuid))
+		{
+			EssentialCmds.backLocations.remove(uuid);
+		}
 
-		Configs.getConfig(playerDataConfig).getNode("back", "users", playerName, "lastDeath", "X").setValue(playerLocation.getX());
-		Configs.getConfig(playerDataConfig).getNode("back", "users", playerName, "lastDeath", "Y").setValue(playerLocation.getY());
-		Configs.getConfig(playerDataConfig).getNode("back", "users", playerName, "lastDeath", "Z").setValue(playerLocation.getZ());
-		Configs.getConfig(playerDataConfig).getNode("back", "users", playerName, "lastDeath", "worldUUID").setValue(playerLocation.getExtent().getUniqueId().toString());
-
-		Configs.saveConfig(playerDataConfig);
+		EssentialCmds.backLocations.put(uuid, playerLocation);
 	}
 
 	public static Location<World> getLastTeleportOrDeathLocation(Player player)
 	{
-		try
+		if (EssentialCmds.backLocations.containsKey(player.getUniqueId()))
 		{
-			String playerName = player.getUniqueId().toString();
-			ConfigurationNode xNode = Configs.getConfig(playerDataConfig).getNode((Object[]) ("back.users." + playerName + "." + "lastDeath.X").split("\\."));
-			double x = xNode.getDouble();
-			ConfigurationNode yNode = Configs.getConfig(playerDataConfig).getNode((Object[]) ("back.users." + playerName + "." + "lastDeath.Y").split("\\."));
-			double y = yNode.getDouble();
-			ConfigurationNode zNode = Configs.getConfig(playerDataConfig).getNode((Object[]) ("back.users." + playerName + "." + "lastDeath.Z").split("\\."));
-			double z = zNode.getDouble();
-			ConfigurationNode worldNode = Configs.getConfig(playerDataConfig).getNode((Object[]) ("back.users." + playerName + "." + "lastDeath.worldUUID").split("\\."));
-			UUID worldUUID = UUID.fromString(worldNode.getString());
-			Optional<World> world = game.getServer().getWorld(worldUUID);
+			return EssentialCmds.backLocations.get(player.getUniqueId());
+		}
 
-			if (world.isPresent())
-				return new Location<>(world.get(), x, y, z);
-			else
-				return null;
-		}
-		catch (Exception e)
-		{
-			return null;
-		}
+		return null;
 	}
 
 	public static ArrayList<String> getRules()
@@ -1613,6 +1510,35 @@ public class Utils
 		{
 			Configs.setValue(mainConfig, valueNode.getPath(), true);
 			return true;
+		}
+	}
+
+	public static List<Mail> getMail(Player player)
+	{
+		return Utils.mail.stream().filter(m -> m.getRecipientName().equals(player.getName())).collect(Collectors.toList());
+	}
+
+	public static void saveMail()
+	{
+		try
+		{
+			String json = gson.toJson(Utils.mail);
+
+			// Assume default encoding.
+			FileWriter fileWriter = new FileWriter("Mail.json");
+
+			// Always wrap FileWriter in BufferedWriter.
+			BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
+
+			bufferedWriter.write(json);
+			bufferedWriter.flush();
+
+			// Always close files.
+			bufferedWriter.close();
+		}
+		catch (Exception ex)
+		{
+			EssentialCmds.getEssentialCmds().getLogger().error("Could not save JSON file!");
 		}
 	}
 }
